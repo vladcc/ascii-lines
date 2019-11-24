@@ -83,43 +83,43 @@ void draw_line_int_dda(frame * frm, point * pt_a, point * pt_b)
         int start_row = pt_a->row;
         int start_col = pt_a->col;
    
-        point next_pt, * pnext_pt = &next_pt;
-        
+        point next_pt;
         for (int i = 1; i < steps; ++i)
         {
             next_pt.row = start_row + SCALE_DOWN(inc_drow*i);
             next_pt.col = start_col + SCALE_DOWN(inc_dcol*i);
-            frame_set_point(frm, pnext_pt, STRONG_DOT);
+            frame_set_point(frm, &next_pt, STRONG_DOT);
         }
         frame_set_point(frm, pt_b, STRONG_DOT);
     }   
 }
 
 #define WEAK_DOT ':'
-#define in_range(row, col)\
-((unsigned)(row) < rows && (unsigned)(col) < cols)
 static void anti_alias(frame * frm, const point * pt, const point * directions)
 {
+#define in_range(row, col)\
+((unsigned)(row) < rows && (unsigned)(col) < cols)
+
     int rows = frm->rows;
     int cols = frm->cols;
     int dir_row = directions->row;
     int dir_col = directions->col;
     
     point aal = *pt;
-    int start_row = aal.row;
-    int start_col = aal.col;
     
-    aal.row = start_row + dir_row;
-    aal.col = start_col + dir_col;
+    aal.row += dir_row;
+    aal.col += dir_col;
     if (in_range(aal.row, aal.col)
         && EMPTY == frame_get_point(frm, &aal))
        frame_set_point(frm, &aal, WEAK_DOT);
     
-    aal.row = start_row - dir_row;
-    aal.col = start_col - dir_col;
+    aal.row -= (dir_row << 1); // * 2
+    aal.col -= (dir_col << 1); // * 2
     if (in_range(aal.row, aal.col)
         && EMPTY == frame_get_point(frm, &aal))
        frame_set_point(frm, &aal, WEAK_DOT);
+       
+#undef in_range
 }
 
 void draw_line_int_dda_aa(frame * frm, point * pt_a, point * pt_b)
