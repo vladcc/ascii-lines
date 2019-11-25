@@ -1,10 +1,9 @@
 # ascii-lines
-draw ascii lines with, or without, really crude "antialiasing"
+draw ascii lines with and without antialiasing
 
-A toy line drawing program. Uses DDA with only int arithmetic and no hotpath
-checks in the non-antialiasing version.
+A toy line drawing program. The non-antialiasing algorithm uses DDA with
+int arithmetic. The antialiasing algorithm uses the Wu idea with minimal
+floating point operations.
 
 Use: ./draw_lines.bin <row1> <col1> <row2> <col2>
 Or : ./draw_lines.bin -t
-
-Code is messy, but the fun is at draw_line_int_dda() and draw_line_int_dda_aa()

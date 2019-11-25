@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,16 +18,6 @@ typedef struct point {
     int row;
     int col;
 } point;
-
-void frame_set_point(frame * frm, point * pt, char ch)
-{
-    frm->buff[pt->row*frm->cols+pt->col] = ch;
-}
-
-char frame_get_point(const frame * frm, const point * pt)
-{
-    return frm->buff[pt->row*frm->cols+pt->col];
-}
 
 void init_frame(frame * frm)
 {
@@ -59,13 +50,17 @@ void print_frame(frame * frm)
     putchar('\n');
 }
 
+void frame_plot_point(frame * frm, point * pt, char ch)
+{
+    frm->buff[pt->row*frm->cols+pt->col] = ch;
+}
 
-#define STRONG_DOT '#'
+#define STRONG_DOT '$'
 #define SCALE_UP(val)   ((val) << 10) // * 1024
 #define SCALE_DOWN(val) ((val) >> 10) // / 1024
 void draw_line_int_dda(frame * frm, point * pt_a, point * pt_b)
 {    
-    frame_set_point(frm, pt_a, STRONG_DOT);
+    frame_plot_point(frm, pt_a, STRONG_DOT);
     
     int drow = pt_b->row - pt_a->row;
     int dcol = pt_b->col - pt_a->col;
@@ -88,73 +83,74 @@ void draw_line_int_dda(frame * frm, point * pt_a, point * pt_b)
         {
             next_pt.row = start_row + SCALE_DOWN(inc_drow*i);
             next_pt.col = start_col + SCALE_DOWN(inc_dcol*i);
-            frame_set_point(frm, &next_pt, STRONG_DOT);
+            frame_plot_point(frm, &next_pt, STRONG_DOT);
         }
-        frame_set_point(frm, pt_b, STRONG_DOT);
+        frame_plot_point(frm, pt_b, STRONG_DOT);
     }   
 }
 
-#define WEAK_DOT ':'
-static void anti_alias(frame * frm, const point * pt, const point * directions)
-{
-#define in_range(row, col)\
-((unsigned)(row) < rows && (unsigned)(col) < cols)
-
-    int rows = frm->rows;
-    int cols = frm->cols;
-    int dir_row = directions->row;
-    int dir_col = directions->col;
-    
-    point aal = *pt;
-    
-    aal.row += dir_row;
-    aal.col += dir_col;
-    if (in_range(aal.row, aal.col)
-        && EMPTY == frame_get_point(frm, &aal))
-       frame_set_point(frm, &aal, WEAK_DOT);
-    
-    aal.row -= (dir_row << 1); // * 2
-    aal.col -= (dir_col << 1); // * 2
-    if (in_range(aal.row, aal.col)
-        && EMPTY == frame_get_point(frm, &aal))
-       frame_set_point(frm, &aal, WEAK_DOT);
-       
-#undef in_range
-}
-
-void draw_line_int_dda_aa(frame * frm, point * pt_a, point * pt_b)
+void draw_line_Wu_aa(frame * frm, point * pt_a, point * pt_b)
 {    
-    frame_set_point(frm, pt_a, STRONG_DOT); 
+    point * lpta = pt_a;
+    point * lptb = pt_b;
+    if (pt_a->row > pt_b->row)
+    {
+        lpta = pt_b;
+        lptb = pt_a;
+    }
+    
+    frame_plot_point(frm, lpta, STRONG_DOT); 
         
-    int drow = pt_b->row - pt_a->row;
-    int dcol = pt_b->col - pt_a->col;
+    int drow = lptb->row - lpta->row;
+    int dcol = lptb->col - lpta->col;
     
     int drow_sign = ((drow > 0) - (drow < 0));
     int dcol_sign = ((dcol > 0) - (dcol < 0));
-    point directions = {.row = drow_sign, .col = dcol_sign};
     
     int abs_drow = drow * drow_sign;
     int abs_dcol = dcol * dcol_sign;
     
-    int steps = (abs_drow > abs_dcol) ? abs_drow : abs_dcol;
+    int inc_p2r = drow_sign;
+    int inc_p2c = 0;
+    
+    float grad_val = (float)drow;
+    int steps = abs_dcol;
+    if (abs_drow > abs_dcol)
+    {
+        steps = abs_drow;
+        grad_val = dcol;
+        inc_p2r = 0;
+        inc_p2c = dcol_sign;
+    }
     
     if (steps)
     {
-        int inc_drow = SCALE_UP(drow)/steps;
-        int inc_dcol = SCALE_UP(dcol)/steps;
-      
-        int start_row = pt_a->row;
-        int start_col = pt_a->col;
-        
-        point next_pt;
+        grad_val /= steps;
+        float inc_drow = (float)drow/(float)steps;
+        float inc_dcol = (float)dcol/(float)steps;
+         
+        int start_row = lpta->row;
+        int start_col = lpta->col;
+              
+        point pt1, pt2;
+        char gradients[] = " .:-=+*#%@$";
+        float fpart_gv, tmp, fi = 0.0f;
         for (int i = 1; i < steps; ++i)
-        {
-            next_pt.row = start_row + SCALE_DOWN(inc_drow*i);
-            next_pt.col = start_col + SCALE_DOWN(inc_dcol*i);
-            frame_set_point(frm, &next_pt, STRONG_DOT);
-            anti_alias(frm, &next_pt, &directions);
+        { 
+            ++fi;
+            tmp = grad_val*fi;
+            fpart_gv = tmp - floorf(tmp);
+            
+            pt1.row = start_row + (int)(inc_drow*fi);
+            pt1.col = start_col + (int)(inc_dcol*fi);
+            
+            pt2.row = pt1.row + inc_p2r;
+            pt2.col = pt1.col + inc_p2c;
+           
+            frame_plot_point(frm, &pt2, gradients[(int)(10.0f*fpart_gv)]);
+            frame_plot_point(frm, &pt1, gradients[(int)((1.0f-fpart_gv)*10.0f)]);
         }
-        frame_set_point(frm, pt_b, STRONG_DOT); 
+        frame_plot_point(frm, lptb, STRONG_DOT); 
     }
 }
 
@@ -210,8 +206,7 @@ void draw_start_center(frame * frm, int divide, draw_line fdraw)
     } 
 }
 
-/*
-void draw_center_start(frame * frm, int divide)
+void draw_center_start(frame * frm, int divide, draw_line fdraw)
 {
     int rows = frm->rows;
     int cols = frm->cols;
@@ -227,7 +222,7 @@ void draw_center_start(frame * frm, int divide)
 
     for (int i = 0; i < repeat; ++i)
     {
-        draw_line_int_dda(frm, center, start);
+        fdraw(frm, center, start);
         start_.col += inccol;
         
         if (start_.col >= cols)
@@ -236,7 +231,7 @@ void draw_center_start(frame * frm, int divide)
     
     for (int i = 0; i < repeat; ++i)
     {
-        draw_line_int_dda(frm, center, start);
+        fdraw(frm, center, start);
         start_.row += incrow;
         
         if (start_.row >= rows)
@@ -245,7 +240,7 @@ void draw_center_start(frame * frm, int divide)
 
     for (int i = 0; i < repeat; ++i)
     {
-        draw_line_int_dda(frm, center, start);
+        fdraw(frm, center, start);
         start_.col -= inccol;
         
         if (start_.col < 0)
@@ -254,14 +249,13 @@ void draw_center_start(frame * frm, int divide)
 
     for (int i = 0; i < repeat; ++i)
     {
-        draw_line_int_dda(frm, center, start);
+        fdraw(frm, center, start);
         start_.row -= incrow;
         
         if (start_.row < 0)
             start_.row = 0;
     } 
 }
-*/
 
 void draw_slopes(frame * frm, draw_line fdraw)
 {
@@ -269,22 +263,26 @@ void draw_slopes(frame * frm, draw_line fdraw)
     
     int rows = frm->rows;
     int cols = frm->cols;
-    int first = 0;
+    int first = 15;
+    int step = 21;
     
-    point dest = {.row = 22, .col = first};
-    for (int i = first; i < cols; i += 15)
+    point dest = {.row = 22, .col = 0};
+    for (int i = first; i < cols; i += step)
     {
-        fdraw(frm, &start, &dest);
         dest.col = i;
+        fdraw(frm, &start, &dest);
     }
+    dest.col = 0;
+    fdraw(frm, &start, &dest);
     
     dest.col = cols-1;
-    dest.row = 0;
-    for (int i = first; i < rows; i += 7)
+    for (int i = first; i < rows; i += step)
     {
-        fdraw(frm, &start, &dest);
         dest.row = i;
+        fdraw(frm, &start, &dest);
     }
+    dest.row = 0;
+    fdraw(frm, &start, &dest);
 }
 
 void test_draw(frame * frm, int divide)
@@ -294,7 +292,7 @@ void test_draw(frame * frm, int divide)
     print_frame(frm);
     
     init_frame(frm);
-    draw_start_center(frm, divide, draw_line_int_dda_aa);
+    draw_center_start(frm, divide, draw_line_int_dda);
     print_frame(frm);
     
     init_frame(frm);
@@ -302,7 +300,15 @@ void test_draw(frame * frm, int divide)
     print_frame(frm);
     
     init_frame(frm);
-    draw_slopes(frm, draw_line_int_dda_aa);
+    draw_start_center(frm, divide, draw_line_Wu_aa);
+    print_frame(frm);
+    
+    init_frame(frm);
+    draw_center_start(frm, divide, draw_line_Wu_aa);
+    print_frame(frm);
+    
+    init_frame(frm);
+    draw_slopes(frm, draw_line_Wu_aa);
     print_frame(frm);
 }
 
@@ -311,7 +317,7 @@ int main(int argc, char * argv[])
 
     if (argc == 2 && argv[1][0] == '-' && argv[1][1] == 't')
     {
-        test_draw(&static_frame, 2);
+        test_draw(&static_frame, 3);
         return 0;
     }
     
@@ -339,9 +345,11 @@ int main(int argc, char * argv[])
     
     frame * the_frame = &static_frame;
     init_frame(the_frame);
-
     draw_line_int_dda(the_frame, &pta, &ptb);
+    print_frame(the_frame);
     
+    init_frame(the_frame);
+    draw_line_Wu_aa(the_frame, &pta, &ptb);
     print_frame(the_frame);
     return 0;
 }
